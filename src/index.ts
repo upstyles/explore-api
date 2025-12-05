@@ -17,7 +17,33 @@ const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+
+// Configure CORS
+const allowedOrigins = [
+  'https://upstyles-pro.web.app',
+  'https://upstyles-pro.firebaseapp.com',
+  'http://localhost:5000',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id', 'Retry-After'],
+  maxAge: 86400 // 24 hours
+}));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(rateLimitAPI);
 
