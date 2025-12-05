@@ -18,9 +18,10 @@ export async function rateLimitSubmissions(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-) {
+): Promise<void> {
   if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
+    res.status(401).json({ error: 'Authentication required' });
+    return;
   }
 
   try {
@@ -29,7 +30,7 @@ export async function rateLimitSubmissions(
   } catch (rejRes: any) {
     const retryAfter = Math.ceil(rejRes.msBeforeNext / 1000);
     res.set('Retry-After', String(retryAfter));
-    return res.status(429).json({
+    res.status(429).json({
       error: 'Daily submission limit reached',
       retryAfter,
     });
@@ -40,7 +41,7 @@ export async function rateLimitAPI(
   req: Request,
   res: Response,
   next: NextFunction
-) {
+): Promise<void> {
   const key = req.ip || 'anonymous';
 
   try {
@@ -49,7 +50,7 @@ export async function rateLimitAPI(
   } catch (rejRes: any) {
     const retryAfter = Math.ceil(rejRes.msBeforeNext / 1000);
     res.set('Retry-After', String(retryAfter));
-    return res.status(429).json({
+    res.status(429).json({
       error: 'Rate limit exceeded',
       retryAfter,
     });

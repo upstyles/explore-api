@@ -17,7 +17,7 @@ router.post(
   '/submissions',
   authenticateUser,
   rateLimitSubmissions,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = SubmissionSchema.parse(req.body);
       const result = await submissionService.createSubmission(req.user!.uid, input);
@@ -40,7 +40,7 @@ router.post(
 router.get(
   '/submissions/mine',
   authenticateUser,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const params = SubmissionFilterSchema.parse(req.query);
       const result = await submissionService.getUserSubmissions(
@@ -61,7 +61,7 @@ router.get(
 router.post(
   '/submissions/:id/withdraw',
   authenticateUser,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const success = await submissionService.withdrawSubmission(
         req.params.id,
@@ -85,7 +85,7 @@ router.get(
   '/moderation/queue',
   authenticateUser,
   requireRole('moderator'),
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const { filter, limit } = req.query;
       const queue = await submissionService.getModerationQueue(
@@ -105,7 +105,7 @@ router.post(
   '/moderation/:id/approve',
   authenticateUser,
   requireRole('moderator'),
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = ApprovalSchema.parse(req.body);
       const entryId = await submissionService.approveSubmission(
@@ -131,7 +131,7 @@ router.post(
   '/moderation/:id/reject',
   authenticateUser,
   requireRole('moderator'),
-  async (req: AuthenticatedRequest, res) => {
+  async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = RejectionSchema.parse(req.body);
       const success = await submissionService.rejectSubmission(

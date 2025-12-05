@@ -1,1 +1,5 @@
-upstyles-pro
+{
+  "projects": {
+    "default": "upstyles-pro"
+  }
+}

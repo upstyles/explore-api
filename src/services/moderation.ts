@@ -35,9 +35,9 @@ export async function moderateImage(imageUrl: string): Promise<ModerationResult>
       return map[level || 'UNKNOWN'] || 0.5;
     };
 
-    const adult = likelihood(safeSearch.adult);
-    const violence = likelihood(safeSearch.violence);
-    const racy = likelihood(safeSearch.racy);
+    const adult = likelihood(String(safeSearch.adult || 'UNKNOWN'));
+    const violence = likelihood(String(safeSearch.violence || 'UNKNOWN'));
+    const racy = likelihood(String(safeSearch.racy || 'UNKNOWN'));
 
     const inappropriate = Math.max(adult, violence, racy);
     const reasons: string[] = [];

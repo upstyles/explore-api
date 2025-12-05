@@ -1,4 +1,4 @@
-import { getFirestore, getStorage } from '../lib/firebase.js';
+import { getFirestore } from '../lib/firebase.js';
 import { SubmissionInput } from '../lib/validation.js';
 import { moderateSubmission, ModerationResult } from './moderation.js';
 import admin from 'firebase-admin';
@@ -25,7 +25,6 @@ export interface Submission {
 
 export class SubmissionService {
   private db = getFirestore();
-  private storage = getStorage();
 
   async createSubmission(
     userId: string,
@@ -47,7 +46,7 @@ export class SubmissionService {
       title: input.title,
       description: input.description || '',
       mediaUrls: input.mediaUrls,
-      tags: input.tags.map(t => t.toLowerCase()),
+      tags: input.tags.map((t: string) => t.toLowerCase()),
       difficulty: input.difficulty || 'beginner',
       priceRange: input.priceRange || 'mid',
       materials: input.materials || [],
@@ -98,7 +97,7 @@ export class SubmissionService {
     const docs = snapshot.docs.slice(0, limit);
     const hasMore = snapshot.docs.length > limit;
 
-    const submissions = docs.map(doc => ({
+    const submissions = docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
       submittedAt: doc.data().submittedAt?.toDate(),
@@ -231,7 +230,7 @@ export class SubmissionService {
 
     const snapshot = await query.get();
 
-    return snapshot.docs.map(doc => ({
+    return snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
       submittedAt: doc.data().submittedAt?.toDate(),
