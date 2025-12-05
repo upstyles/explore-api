@@ -1,0 +1,16 @@
+runConfig:
+  runtime: nodejs20
+  minInstances: 0
+  maxInstances: 10
+
+env:
+  - variable: NODE_ENV
+    value: production
+  - variable: FIREBASE_PROJECT_ID
+    value: upstyles-pro
+  - variable: MEDIA_BUCKET
+    value: upstyles-pro.appspot.com
+  - variable: RATE_LIMIT_SUBMISSIONS_DAILY
+    value: "10"
+  - variable: RATE_LIMIT_API_PER_MINUTE
+    value: "60"
