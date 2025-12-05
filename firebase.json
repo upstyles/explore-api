@@ -1,0 +1,6 @@
+{
+  "apphosting": {
+    "source": ".",
+    "runtime": "nodejs20"
+  }
+}
