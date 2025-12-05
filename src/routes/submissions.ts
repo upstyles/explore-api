@@ -10,7 +10,15 @@ import {
 } from '../lib/validation.js';
 
 const router = Router();
-const submissionService = new SubmissionService();
+let submissionService: SubmissionService;
+
+// Initialize service lazily
+function getSubmissionService(): SubmissionService {
+  if (!submissionService) {
+    submissionService = new SubmissionService();
+  }
+  return submissionService;
+}
 
 // Create submission (user-facing)
 router.post(
@@ -20,7 +28,7 @@ router.post(
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = SubmissionSchema.parse(req.body);
-      const result = await submissionService.createSubmission(req.user!.uid, input);
+      const result = await getSubmissionService().createSubmission(req.user!.uid, input);
       
       res.status(201).json({
         ...result,
@@ -28,7 +36,8 @@ router.post(
       });
     } catch (error: any) {
       if (error.name === 'ZodError') {
-        return res.status(400).json({ error: 'Invalid submission data', details: error.errors });
+        res.status(400).json({ error: 'Invalid submission data', details: error.errors });
+        return;
       }
       console.error('[Route] Create submission error:', error);
       res.status(500).json({ error: 'Failed to create submission' });
@@ -43,7 +52,7 @@ router.get(
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const params = SubmissionFilterSchema.parse(req.query);
-      const result = await submissionService.getUserSubmissions(
+      const result = await getSubmissionService().getUserSubmissions(
         req.user!.uid,
         params.status,
         params.limit,
@@ -63,13 +72,14 @@ router.post(
   authenticateUser,
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
-      const success = await submissionService.withdrawSubmission(
+      const success = await getSubmissionService().withdrawSubmission(
         req.params.id,
         req.user!.uid
       );
       
       if (!success) {
-        return res.status(404).json({ error: 'Submission not found or not owned by user' });
+        res.status(404).json({ error: 'Submission not found or not owned by user' });
+        return;
       }
       
       res.json({ withdrawn: true });
@@ -88,7 +98,7 @@ router.get(
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const { filter, limit } = req.query;
-      const queue = await submissionService.getModerationQueue(
+      const queue = await getSubmissionService().getModerationQueue(
         filter as string | undefined,
         limit ? Number(limit) : 50
       );
@@ -108,7 +118,7 @@ router.post(
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = ApprovalSchema.parse(req.body);
-      const entryId = await submissionService.approveSubmission(
+      const entryId = await getSubmissionService().approveSubmission(
         req.params.id,
         req.user!.uid,
         input.collectionId,
@@ -118,7 +128,8 @@ router.post(
       res.json({ entryId, approved: true });
     } catch (error: any) {
       if (error.name === 'ZodError') {
-        return res.status(400).json({ error: 'Invalid approval data', details: error.errors });
+        res.status(400).json({ error: 'Invalid approval data', details: error.errors });
+        return;
       }
       console.error('[Route] Approve submission error:', error);
       res.status(500).json({ error: 'Failed to approve submission' });
@@ -134,20 +145,22 @@ router.post(
   async (req: AuthenticatedRequest, res): Promise<void> => {
     try {
       const input = RejectionSchema.parse(req.body);
-      const success = await submissionService.rejectSubmission(
+      const success = await getSubmissionService().rejectSubmission(
         req.params.id,
         req.user!.uid,
         input.reason
       );
       
       if (!success) {
-        return res.status(404).json({ error: 'Submission not found' });
+        res.status(404).json({ error: 'Submission not found' });
+        return;
       }
       
       res.json({ rejected: true });
     } catch (error: any) {
       if (error.name === 'ZodError') {
-        return res.status(400).json({ error: 'Invalid rejection data', details: error.errors });
+        res.status(400).json({ error: 'Invalid rejection data', details: error.errors });
+        return;
       }
       console.error('[Route] Reject submission error:', error);
       res.status(500).json({ error: 'Failed to reject submission' });
