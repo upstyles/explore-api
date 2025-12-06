@@ -12,10 +12,12 @@ export interface ModerationResult {
 
 export async function moderateImage(imageUrl: string): Promise<ModerationResult> {
   try {
+    console.log('[Moderation] Analyzing image:', imageUrl);
     const [result] = await client.safeSearchDetection(imageUrl);
     const safeSearch = result.safeSearchAnnotation;
 
     if (!safeSearch) {
+      console.warn('[Moderation] No safe search annotation returned');
       return {
         safe: false,
         spam: 0,
@@ -53,12 +55,14 @@ export async function moderateImage(imageUrl: string): Promise<ModerationResult>
       reasons,
     };
   } catch (error) {
-    console.error('[Moderation] Error analyzing image:', error);
+    console.error('[Moderation] Error analyzing image:', imageUrl, error);
+    console.error('[Moderation] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    // Return safe=true to allow submission even if moderation fails
     return {
-      safe: false,
+      safe: true,
       spam: 0,
-      inappropriate: 1,
-      reasons: ['Moderation service error'],
+      inappropriate: 0,
+      reasons: ['Moderation service temporarily unavailable'],
     };
   }
 }

@@ -40,7 +40,12 @@ router.post(
         return;
       }
       console.error('[Route] Create submission error:', error);
-      res.status(500).json({ error: 'Failed to create submission' });
+      console.error('[Route] Error stack:', error.stack);
+      console.error('[Route] Error details:', JSON.stringify(error, null, 2));
+      res.status(500).json({ 
+        error: 'Failed to create submission',
+        details: error.message || 'Unknown error'
+      });
     }
   }
 );
