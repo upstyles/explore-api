@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import submissionsRouter from './submissions.js';
+import adminRouter from './admin.js';
 
 const router = Router();
 
@@ -10,5 +11,6 @@ router.get('/health', (_req, res) => {
 
 // Mount routes
 router.use('/explore', submissionsRouter);
+router.use('/admin', adminRouter);
 
 export default router;

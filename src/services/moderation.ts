@@ -3,11 +3,20 @@ import { getFirestore } from '../lib/firebase.js';
 
 const client = new vision.ImageAnnotatorClient();
 
+// Cost tracking constants
+const VISION_API_COST_PER_IMAGE = parseFloat(process.env.VISION_API_COST_PER_IMAGE || '0.0015');
+const COST_ALERT_THRESHOLD = parseFloat(process.env.VISION_API_ALERT_THRESHOLD || '100');
+
 export interface ModerationResult {
   safe: boolean;
   spam: number; // 0-1 confidence
   inappropriate: number; // 0-1 confidence
   reasons: string[];
+  metadata?: {
+    imagesProcessed: number;
+    estimatedCost: number;
+    processingTime: number;
+  };
 }
 
 export async function moderateImage(imageUrl: string): Promise<ModerationResult> {
@@ -71,6 +80,8 @@ export async function moderateSubmission(
   userId: string,
   mediaUrls: string[]
 ): Promise<ModerationResult> {
+  const startTime = Date.now();
+  
   // Check for spam (rapid submissions)
   const recentCount = await checkRecentSubmissionCount(userId);
   const spamScore = Math.min(recentCount / 10, 1); // Flag if >10 in last hour
@@ -87,11 +98,22 @@ export async function moderateSubmission(
     allReasons.push('Rapid submission pattern detected');
   }
 
+  const processingTime = Date.now() - startTime;
+  const estimatedCost = mediaUrls.length * VISION_API_COST_PER_IMAGE;
+
+  // Log cost tracking
+  await trackModerationCost(userId, mediaUrls.length, estimatedCost);
+
   return {
     safe: maxInappropriate < 0.5 && spamScore < 0.7,
     spam: spamScore,
     inappropriate: maxInappropriate,
     reasons: [...new Set(allReasons)],
+    metadata: {
+      imagesProcessed: mediaUrls.length,
+      estimatedCost,
+      processingTime,
+    },
   };
 }
 
@@ -107,4 +129,98 @@ async function checkRecentSubmissionCount(userId: string): Promise<number> {
     .get();
 
   return snapshot.data().count;
+}
+
+/**
+ * Track Vision API usage and costs in Firestore
+ */
+async function trackModerationCost(
+  userId: string,
+  imageCount: number,
+  estimatedCost: number
+): Promise<void> {
+  try {
+    const db = getFirestore();
+    await db.collection('moderation_metrics').add({
+      userId,
+      imageCount,
+      estimatedCost,
+      timestamp: new Date(),
+      apiService: 'vision',
+    });
+
+    // Check monthly total and alert if over threshold
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+
+    const snapshot = await db.collection('moderation_metrics')
+      .where('timestamp', '>=', thisMonth)
+      .get();
+
+    const monthlyTotal = snapshot.docs.reduce((sum, doc) => 
+      sum + (doc.data().estimatedCost || 0), 0
+    );
+
+    if (monthlyTotal > COST_ALERT_THRESHOLD) {
+      console.warn(
+        `[Moderation] Monthly Vision API cost ($${monthlyTotal.toFixed(2)}) ` +
+        `exceeds threshold ($${COST_ALERT_THRESHOLD})`
+      );
+      // TODO: Send alert email/notification
+    }
+
+    console.log(
+      `[Moderation] Processed ${imageCount} images for $${estimatedCost.toFixed(4)} ` +
+      `(Monthly total: $${monthlyTotal.toFixed(2)})`
+    );
+  } catch (error) {
+    console.error('[Moderation] Failed to track cost:', error);
+    // Don't fail the request if tracking fails
+  }
+}
+
+/**
+ * Get Vision API cost statistics for admin dashboard
+ */
+export async function getModerationStats(startDate?: Date, endDate?: Date) {
+  const db = getFirestore();
+  let query = db.collection('moderation_metrics').orderBy('timestamp', 'desc');
+
+  if (startDate) {
+    query = query.where('timestamp', '>=', startDate);
+  }
+  if (endDate) {
+    query = query.where('timestamp', '<=', endDate);
+  }
+
+  const snapshot = await query.limit(1000).get();
+  
+  const stats = {
+    totalImages: 0,
+    totalCost: 0,
+    averageCostPerImage: 0,
+    requestCount: snapshot.size,
+    byDay: {} as Record<string, { images: number; cost: number }>,
+  };
+
+  snapshot.docs.forEach(doc => {
+    const data = doc.data();
+    stats.totalImages += data.imageCount || 0;
+    stats.totalCost += data.estimatedCost || 0;
+
+    // Group by day
+    const date = data.timestamp.toDate().toISOString().split('T')[0];
+    if (!stats.byDay[date]) {
+      stats.byDay[date] = { images: 0, cost: 0 };
+    }
+    stats.byDay[date].images += data.imageCount || 0;
+    stats.byDay[date].cost += data.estimatedCost || 0;
+  });
+
+  stats.averageCostPerImage = stats.totalImages > 0 
+    ? stats.totalCost / stats.totalImages 
+    : 0;
+
+  return stats;
 }
