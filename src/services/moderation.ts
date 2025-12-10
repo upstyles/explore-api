@@ -5,28 +5,7 @@ const client = new vision.ImageAnnotatorClient();
 
 // Cost tracking constants
 const VISION_API_COST_PER_IMAGE = parseFloat(process.env.VISION_API_COST_PER_IMAGE || '0.0015');
-const VISION_API_COST_PER_LABEL = parseFloat(process.env.VISION_API_COST_PER_LABEL || '0.0015');
 const COST_ALERT_THRESHOLD = parseFloat(process.env.VISION_API_ALERT_THRESHOLD || '100');
-
-// Nail-related keywords for content relevance detection
-const NAIL_RELATED_LABELS = [
-  'nail', 'nails', 'manicure', 'pedicure', 'nail art', 'nail polish',
-  'fingernail', 'toenail', 'nail salon', 'nail design', 'acrylic nail',
-  'gel nail', 'nail extension', 'nail tip', 'cuticle', 'nail bed',
-  'french manicure', 'nail technician', 'nail care', 'nail treatment',
-  'hand', 'finger', 'cosmetics', 'beauty', 'spa', 'beauty salon',
-  'nail lacquer', 'nail color', 'nail file', 'nail brush', 'nail lamp',
-  'press on nails', 'dip powder', 'shellac', 'nail wrap', 'nail sticker',
-  'rhinestone', 'glitter', 'nail gem', 'nail charm', 'ombre nails',
-  'chrome nails', 'matte nails', 'glossy', 'stiletto nails', 'coffin nails',
-  'almond nails', 'square nails', 'oval nails', 'nail shape',
-];
-
-// Beauty product related labels (allowed as nail-adjacent content)
-const BEAUTY_PRODUCT_LABELS = [
-  'cosmetic', 'beauty product', 'makeup', 'skincare', 'lotion',
-  'cream', 'bottle', 'container', 'beauty', 'salon', 'spa',
-];
 
 export interface ModerationResult {
   safe: boolean;
@@ -40,12 +19,9 @@ export interface ModerationResult {
   };
 }
 
-export interface EnhancedModerationResult extends ModerationResult {
-  nailRelated: boolean;
-  nailRelevanceScore: number;
-  detectedLabels: string[];
-}
-
+/**
+ * Moderate a single image using Vision API SafeSearch
+ */
 export async function moderateImage(imageUrl: string): Promise<ModerationResult> {
   try {
     console.log('[Moderation] Analyzing image:', imageUrl);
@@ -86,7 +62,7 @@ export async function moderateImage(imageUrl: string): Promise<ModerationResult>
 
     return {
       safe: inappropriate < 0.5,
-      spam: 0, // Implement spam detection separately
+      spam: 0,
       inappropriate,
       reasons,
     };
@@ -104,185 +80,8 @@ export async function moderateImage(imageUrl: string): Promise<ModerationResult>
 }
 
 /**
- * Check if an image contains nail-related content using label detection
+ * Moderate multiple images for a submission
  */
-export async function checkNailRelevance(imageUrl: string): Promise<{
-  isNailRelated: boolean;
-  relevanceScore: number;
-  detectedLabels: string[];
-  reasons: string[];
-}> {
-  try {
-    console.log('[Moderation] Checking nail relevance for:', imageUrl);
-    const [result] = await client.labelDetection(imageUrl);
-    const labels = result.labelAnnotations || [];
-
-    const detectedLabels = labels.map(l => l.description?.toLowerCase() || '');
-    const labelScores = labels.map(l => ({
-      label: l.description?.toLowerCase() || '',
-      score: l.score || 0,
-    }));
-
-    // Check for nail-related labels
-    let nailScore = 0;
-    let beautyScore = 0;
-    const matchedNailLabels: string[] = [];
-    const matchedBeautyLabels: string[] = [];
-
-    for (const { label, score } of labelScores) {
-      // Check nail-specific labels - require exact match or word boundary
-      for (const nailLabel of NAIL_RELATED_LABELS) {
-        // Check for exact match or if the label contains the nail term as a word
-        const labelWords = label.split(/\s+/);
-        const nailWords = nailLabel.split(/\s+/);
-        
-        // Exact match or label contains the nail keyword as complete word
-        if (label === nailLabel || 
-            labelWords.some(w => nailWords.includes(w)) ||
-            nailWords.some(w => labelWords.includes(w) && w.length > 3)) {
-          nailScore = Math.max(nailScore, score);
-          if (!matchedNailLabels.includes(label)) {
-            matchedNailLabels.push(label);
-          }
-          break;
-        }
-      }
-      
-      // Check beauty product labels (secondary relevance)
-      for (const beautyLabel of BEAUTY_PRODUCT_LABELS) {
-        const labelWords = label.split(/\s+/);
-        const beautyWords = beautyLabel.split(/\s+/);
-        
-        if (label === beautyLabel || 
-            labelWords.some(w => beautyWords.includes(w)) ||
-            beautyWords.some(w => labelWords.includes(w) && w.length > 3)) {
-          beautyScore = Math.max(beautyScore, score * 0.5); // Lower weight for generic beauty
-          if (!matchedBeautyLabels.includes(label)) {
-            matchedBeautyLabels.push(label);
-          }
-          break;
-        }
-      }
-    }
-
-    // Combined relevance score (nail labels weighted higher)
-    // Only add beauty score if there's at least some nail relevance
-    const relevanceScore = nailScore > 0 
-      ? Math.min(1, nailScore + (beautyScore * 0.3))
-      : beautyScore * 0.5; // Beauty products alone get reduced score
-      
-    const isNailRelated = nailScore >= 0.5 || (beautyScore >= 0.7 && nailScore >= 0.3); // Require strong nail signal
-
-    const reasons: string[] = [];
-    if (!isNailRelated) {
-      reasons.push('Content does not appear to be nail-related');
-      if (detectedLabels.length > 0) {
-        reasons.push(`Detected: ${detectedLabels.slice(0, 5).join(', ')}`);
-      }
-    }
-
-    console.log(`[Moderation] Nail relevance: ${relevanceScore.toFixed(2)}, nailScore: ${nailScore.toFixed(2)}, matched: ${matchedNailLabels.join(', ')}`);
-
-    return {
-      isNailRelated,
-      relevanceScore,
-      detectedLabels: detectedLabels.slice(0, 10),
-      reasons,
-    };
-  } catch (error) {
-    console.error('[Moderation] Error checking nail relevance:', error);
-    // On error, allow the content (fail open)
-    return {
-      isNailRelated: true,
-      relevanceScore: 0.5,
-      detectedLabels: [],
-      reasons: ['Relevance check temporarily unavailable'],
-    };
-  }
-}
-
-/**
- * Enhanced moderation that checks both safety AND nail relevance
- */
-export async function moderateImageEnhanced(imageUrl: string): Promise<EnhancedModerationResult> {
-  const [safetyResult, relevanceResult] = await Promise.all([
-    moderateImage(imageUrl),
-    checkNailRelevance(imageUrl),
-  ]);
-
-  const allReasons = [...safetyResult.reasons, ...relevanceResult.reasons];
-  
-  // Content is safe only if it passes safety check AND is nail-related
-  const safe = safetyResult.safe && relevanceResult.isNailRelated;
-
-  return {
-    ...safetyResult,
-    safe,
-    nailRelated: relevanceResult.isNailRelated,
-    nailRelevanceScore: relevanceResult.relevanceScore,
-    detectedLabels: relevanceResult.detectedLabels,
-    reasons: allReasons,
-  };
-}
-
-/**
- * Enhanced submission moderation with nail relevance checking
- */
-export async function moderateSubmissionEnhanced(
-  userId: string,
-  mediaUrls: string[],
-  checkRelevance = true
-): Promise<EnhancedModerationResult> {
-  const startTime = Date.now();
-  
-  // Check for spam (rapid submissions)
-  const recentCount = await checkRecentSubmissionCount(userId);
-  const spamScore = Math.min(recentCount / 10, 1);
-
-  // Moderate all images with enhanced checks
-  const imageResults = await Promise.all(
-    mediaUrls.map(url => checkRelevance ? moderateImageEnhanced(url) : moderateImage(url).then(r => ({
-      ...r,
-      nailRelated: true,
-      nailRelevanceScore: 1,
-      detectedLabels: [],
-    })))
-  );
-
-  const maxInappropriate = Math.max(...imageResults.map(r => r.inappropriate));
-  const minNailRelevance = Math.min(...imageResults.map(r => r.nailRelevanceScore));
-  const allNailRelated = imageResults.every(r => r.nailRelated);
-  const allReasons = imageResults.flatMap(r => r.reasons);
-  const allLabels = [...new Set(imageResults.flatMap(r => r.detectedLabels))];
-
-  if (spamScore > 0.7) {
-    allReasons.push('Rapid submission pattern detected');
-  }
-
-  const processingTime = Date.now() - startTime;
-  // Cost: SafeSearch + Label detection per image
-  const estimatedCost = mediaUrls.length * (VISION_API_COST_PER_IMAGE + (checkRelevance ? VISION_API_COST_PER_LABEL : 0));
-
-  await trackModerationCost(userId, mediaUrls.length, estimatedCost);
-
-  const safe = maxInappropriate < 0.5 && spamScore < 0.7 && allNailRelated;
-
-  return {
-    safe,
-    spam: spamScore,
-    inappropriate: maxInappropriate,
-    nailRelated: allNailRelated,
-    nailRelevanceScore: minNailRelevance,
-    detectedLabels: allLabels.slice(0, 20),
-    reasons: [...new Set(allReasons)],
-    metadata: {
-      imagesProcessed: mediaUrls.length,
-      estimatedCost,
-      processingTime,
-    },
-  };
-}
-
 export async function moderateSubmission(
   userId: string,
   mediaUrls: string[]
@@ -374,7 +173,6 @@ async function trackModerationCost(
         `[Moderation] Monthly Vision API cost ($${monthlyTotal.toFixed(2)}) ` +
         `exceeds threshold ($${COST_ALERT_THRESHOLD})`
       );
-      // TODO: Send alert email/notification
     }
 
     console.log(
