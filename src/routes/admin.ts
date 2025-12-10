@@ -1,5 +1,5 @@
-import { Router, Request, Response } from 'express';
-import { verifyAuth } from '../middleware/auth.js';
+import { Router, Response } from 'express';
+import { authenticateUser, AuthenticatedRequest } from '../middleware/auth.js';
 import { getModerationStats } from '../services/moderation.js';
 
 const router = Router();
@@ -8,12 +8,13 @@ const router = Router();
  * GET /api/admin/moderation/stats
  * Get Vision API usage statistics (admin only)
  */
-router.get('/moderation/stats', verifyAuth, async (req: Request, res: Response) => {
+router.get('/moderation/stats', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     // Check if user has admin or moderator role
-    const customClaims = req.user?.customClaims || {};
+    const customClaims = (req.user as any)?.customClaims || {};
     if (!customClaims.admin && !customClaims.moderator) {
-      return res.status(403).json({ error: 'Admin or moderator access required' });
+      res.status(403).json({ error: 'Admin or moderator access required' });
+      return;
     }
 
     // Parse date range from query params
@@ -47,11 +48,12 @@ router.get('/moderation/stats', verifyAuth, async (req: Request, res: Response) 
  * GET /api/admin/moderation/monthly-cost
  * Get current month's Vision API cost
  */
-router.get('/moderation/monthly-cost', verifyAuth, async (req: Request, res: Response) => {
+router.get('/moderation/monthly-cost', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const customClaims = req.user?.customClaims || {};
+    const customClaims = (req.user as any)?.customClaims || {};
     if (!customClaims.admin && !customClaims.moderator) {
-      return res.status(403).json({ error: 'Admin or moderator access required' });
+      res.status(403).json({ error: 'Admin or moderator access required' });
+      return;
     }
 
     const thisMonth = new Date();
