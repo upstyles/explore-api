@@ -130,25 +130,48 @@ export async function checkNailRelevance(imageUrl: string): Promise<{
     const matchedBeautyLabels: string[] = [];
 
     for (const { label, score } of labelScores) {
-      // Check nail-specific labels
+      // Check nail-specific labels - require exact match or word boundary
       for (const nailLabel of NAIL_RELATED_LABELS) {
-        if (label.includes(nailLabel) || nailLabel.includes(label)) {
+        // Check for exact match or if the label contains the nail term as a word
+        const labelWords = label.split(/\s+/);
+        const nailWords = nailLabel.split(/\s+/);
+        
+        // Exact match or label contains the nail keyword as complete word
+        if (label === nailLabel || 
+            labelWords.some(w => nailWords.includes(w)) ||
+            nailWords.some(w => labelWords.includes(w) && w.length > 3)) {
           nailScore = Math.max(nailScore, score);
-          matchedNailLabels.push(label);
+          if (!matchedNailLabels.includes(label)) {
+            matchedNailLabels.push(label);
+          }
+          break;
         }
       }
+      
       // Check beauty product labels (secondary relevance)
       for (const beautyLabel of BEAUTY_PRODUCT_LABELS) {
-        if (label.includes(beautyLabel) || beautyLabel.includes(label)) {
-          beautyScore = Math.max(beautyScore, score * 0.7); // Lower weight for generic beauty
-          matchedBeautyLabels.push(label);
+        const labelWords = label.split(/\s+/);
+        const beautyWords = beautyLabel.split(/\s+/);
+        
+        if (label === beautyLabel || 
+            labelWords.some(w => beautyWords.includes(w)) ||
+            beautyWords.some(w => labelWords.includes(w) && w.length > 3)) {
+          beautyScore = Math.max(beautyScore, score * 0.5); // Lower weight for generic beauty
+          if (!matchedBeautyLabels.includes(label)) {
+            matchedBeautyLabels.push(label);
+          }
+          break;
         }
       }
     }
 
     // Combined relevance score (nail labels weighted higher)
-    const relevanceScore = Math.min(1, nailScore + (beautyScore * 0.3));
-    const isNailRelated = relevanceScore >= 0.3; // 30% threshold
+    // Only add beauty score if there's at least some nail relevance
+    const relevanceScore = nailScore > 0 
+      ? Math.min(1, nailScore + (beautyScore * 0.3))
+      : beautyScore * 0.5; // Beauty products alone get reduced score
+      
+    const isNailRelated = nailScore >= 0.5 || (beautyScore >= 0.7 && nailScore >= 0.3); // Require strong nail signal
 
     const reasons: string[] = [];
     if (!isNailRelated) {
@@ -158,7 +181,7 @@ export async function checkNailRelevance(imageUrl: string): Promise<{
       }
     }
 
-    console.log(`[Moderation] Nail relevance: ${relevanceScore.toFixed(2)}, matched: ${matchedNailLabels.join(', ')}`);
+    console.log(`[Moderation] Nail relevance: ${relevanceScore.toFixed(2)}, nailScore: ${nailScore.toFixed(2)}, matched: ${matchedNailLabels.join(', ')}`);
 
     return {
       isNailRelated,
